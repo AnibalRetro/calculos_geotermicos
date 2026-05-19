@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LAS Viewer - Carga</title>
+  <link rel="stylesheet" href="/static/logs/styles.css">
+</head>
+<body>
+<div class="container">
+  <h1>LAS Viewer local</h1>
+  <section class="panel">
+    <h2>Panel de carga</h2>
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit">Cargar y analizar</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Archivos cargados en esta instalación</h2>
+    <ul>
+      {% for f in files %}
+      <li><a href="{% url 'analysis' f.id %}">{{ f.original_name }}</a> - {{ f.uploaded_at }}</li>
+      {% empty %}<li>No hay archivos cargados.</li>{% endfor %}
+    </ul>
+  </section>
+</div>
+</body>
+</html>

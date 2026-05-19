@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Análisis {{ record.original_name }}</title>
+  <link rel="stylesheet" href="/static/logs/styles.css">
+</head>
+{% load log_extras %}
+<body>
+<div class="container">
+  <h1>Análisis: {{ record.original_name }}</h1>
+  <a href="/">← Cargar otro archivo</a>
+
+  <section class="panel"><h2>Panel de metadatos</h2>
+    <ul>
+      <li>Versión LAS: {{ analysis.metadata.version }}</li><li>Well name: {{ analysis.metadata.well_name }}</li>
+      <li>Company: {{ analysis.metadata.company }}</li><li>Field: {{ analysis.metadata.field }}</li>
+      <li>Location: {{ analysis.metadata.location }}</li><li>Start depth: {{ analysis.metadata.start_depth }}</li>
+      <li>Stop depth: {{ analysis.metadata.stop_depth }}</li><li>Step: {{ analysis.metadata.step }}</li>
+      <li>Null value: {{ analysis.metadata.null_value }}</li>
+    </ul>
+  </section>
+
+  <section class="panel"><h2>Panel de curvas</h2>
+    <table><tr><th>Mnemonic</th><th>Unit</th><th>Description</th></tr>
+      {% for c in analysis.curves %}<tr><td>{{ c.mnemonic }}</td><td>{{ c.unit }}</td><td>{{ c.description }}</td></tr>{% endfor %}
+    </table>
+  </section>
+
+  <section class="panel"><h2>Panel de gráficas</h2>
+    <form method="post">{% csrf_token %}
+      <p>Seleccione curvas a graficar (profundidad detectada: <b>{{ analysis.depth_curve }}</b>):</p>
+      <div class="checkbox-grid">{% for curve in analysis.all_curve_names %}
+        <label><input type="checkbox" name="curves" value="{{ curve }}" {% if curve in selected_curves %}checked{% endif %}>{{ curve }}</label>
+      {% endfor %}</div>
+      <button type="submit">Actualizar gráficas</button>
+    </form>
+    {% for c in charts %}<div class="plot">{{ c.html|safe }}</div>{% empty %}<p>Sin curvas seleccionadas.</p>{% endfor %}
+  </section>
+
+  <section class="panel"><h2>Tabla de datos (primeros 50 registros)</h2>
+    <div class="table-scroll"><table><tr>{% for col in analysis.table_columns %}<th>{{ col }}</th>{% endfor %}</tr>
+      {% for row in analysis.table_preview %}<tr>{% for col in analysis.table_columns %}<td>{{ row|get_item:col }}</td>{% endfor %}</tr>{% endfor %}
+    </table></div>
+  </section>
+
+  <section class="panel"><h2>Estadísticas básicas por curva</h2>
+    <table><tr><th>Curva</th><th>Mín</th><th>Máx</th><th>Prom</th><th>Std</th><th>Nulos</th></tr>
+      {% for s in analysis.curve_stats %}<tr><td>{{ s.curve }}</td><td>{{ s.min }}</td><td>{{ s.max }}</td><td>{{ s.mean }}</td><td>{{ s.std }}</td><td>{{ s.nulls }}</td></tr>{% endfor %}
+    </table>
+  </section>
+
+  <section class="panel"><h2>Interpretación preliminar</h2>
+    <ul>{% for line in analysis.interpretation_lines %}<li>{{ line }}</li>{% endfor %}</ul>
+    <h3>Intervalos de posible interés</h3>
+    <ul>{% for line in analysis.interval_hints %}<li>{{ line }}</li>{% endfor %}</ul>
+  </section>
+</div>
+</body>
+</html>

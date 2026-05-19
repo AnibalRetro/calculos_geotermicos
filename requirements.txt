@@ -1,0 +1,4 @@
+Django>=5.0,<6.0
+lasio>=0.31
+pandas>=2.2
+plotly>=5.24
