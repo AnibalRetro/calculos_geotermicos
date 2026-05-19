@@ -55,3 +55,5 @@ Aplicación local para cargar, visualizar e interpretar archivos `.las` de regis
   python manage.py migrate
   ```
 - Si abriste el servidor antes de migrar, detenlo y vuelve a ejecutar `python manage.py runserver`.
+
+- La carpeta `media/las_files/` viene inicializada en el repositorio (`.gitkeep`) y Django creará/gestionará archivos ahí al cargar LAS.

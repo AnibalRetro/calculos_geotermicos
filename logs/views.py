@@ -8,10 +8,10 @@ from .services.las_parser import LASParserError, build_plot_html, parse_las_file
 
 
 def upload_view(request):
-    files = UploadedLAS.objects.none()
+    files = []
     db_ready = True
     try:
-        files = UploadedLAS.objects.order_by('-uploaded_at')
+        files = list(UploadedLAS.objects.order_by('-uploaded_at'))
     except (OperationalError, ProgrammingError):
         db_ready = False
         messages.warning(
