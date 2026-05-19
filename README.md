@@ -4,7 +4,7 @@ Aplicación local para cargar, visualizar e interpretar archivos `.las` de regis
 
 ## Características
 - Carga de archivos LAS con validación de extensión.
-- Lectura y parseo con `lasio`.
+- Lectura dual: LAS estándar con `lasio` y fallback para `.las` tabulares (encabezado + unidades + datos).
 - Visualización de metadatos de pozo y listado completo de curvas.
 - Vista tabular de los primeros 50 registros con `pandas`.
 - Selección de curvas y gráficas interactivas con `plotly` (profundidad invertida en Y).
@@ -57,3 +57,5 @@ Aplicación local para cargar, visualizar e interpretar archivos `.las` de regis
 - Si abriste el servidor antes de migrar, detenlo y vuelve a ejecutar `python manage.py runserver`.
 
 - La carpeta `media/las_files/` viene inicializada en el repositorio (`.gitkeep`) y Django creará/gestionará archivos ahí al cargar LAS.
+
+- Soporta LAS estándar y archivos `.las` tabulares con primera fila de curvas, segunda fila de unidades y desde tercera fila datos numéricos.

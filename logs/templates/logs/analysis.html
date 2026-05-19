@@ -12,6 +12,13 @@
   <h1>Análisis: {{ record.original_name }}</h1>
   <a href="/">← Cargar otro archivo</a>
 
+  {% if analysis.warnings %}
+  <section class="panel">
+    {% for w in analysis.warnings %}<p class="msg warning">{{ w }}</p>{% endfor %}
+    <p><b>Tipo de parser:</b> {{ analysis.parser_type }}</p>
+  </section>
+  {% endif %}
+
   <section class="panel"><h2>Panel de metadatos</h2>
     <ul>
       <li>Versión LAS: {{ analysis.metadata.version }}</li><li>Well name: {{ analysis.metadata.well_name }}</li>
@@ -55,6 +62,7 @@
     <ul>{% for line in analysis.interpretation_lines %}<li>{{ line }}</li>{% endfor %}</ul>
     <h3>Intervalos de posible interés</h3>
     <ul>{% for line in analysis.interval_hints %}<li>{{ line }}</li>{% endfor %}</ul>
+    <table><tr><th>Prof. inicial</th><th>Prof. final</th><th>Condiciones</th></tr>{% for i in analysis.intervals_table %}<tr><td>{{ i.start_depth }}</td><td>{{ i.end_depth }}</td><td>{{ i.conditions }}</td></tr>{% empty %}<tr><td colspan="3">Sin intervalos detectados.</td></tr>{% endfor %}</table>
   </section>
 </div>
 </body>

@@ -22,34 +22,48 @@ class LASAnalysis:
     all_curve_names: list
     interpretation_lines: list
     interval_hints: list
+    intervals_table: list
+    warnings: list
+    parser_type: str
+    units: dict
 
 
-def parse_las_file(file_path):
+def parse_las_file(uploaded_file):
+    """Parser principal con fallback tabular."""
     try:
-        las = lasio.read(file_path)
-    except UnicodeDecodeError:
-        with open(file_path, 'rb') as f:
-            raw = f.read()
-        for enc in ('latin-1', 'cp1252'):
-            try:
-                text = raw.decode(enc)
-                las = lasio.read(io.StringIO(text))
-                break
-            except Exception:
-                las = None
-        if las is None:
-            raise LASParserError('No se pudo leer el archivo por problemas de codificación.')
-    except Exception as exc:
-        raise LASParserError(f'Archivo inválido o no legible: {exc}') from exc
+        parsed = parse_standard_lasio(uploaded_file)
+    except LASParserError as exc:
+        if 'No ~ sections found' in str(exc):
+            parsed = parse_tabular_las(uploaded_file)
+            parsed['warnings'].append('Este archivo no es LAS estándar; se leyó como tabla tabulada.')
+        else:
+            raise
 
+    return build_analysis_output(parsed)
+
+
+def parse_standard_lasio(uploaded_file):
+    las = _read_las_with_fallback_encoding(uploaded_file)
     df = las.df()
     if df.empty:
         raise LASParserError('El archivo no contiene datos numéricos para analizar.')
 
-    depth_curve = detect_depth_curve(df)
-    if depth_curve not in df.columns:
+    depth_curve = detect_depth_curve(df.columns)
+    if not depth_curve:
+        if df.index.name:
+            depth_curve = df.index.name
+            df = df.reset_index()
+        else:
+            raise LASParserError('No se encontró curva de profundidad')
+    elif depth_curve not in df.columns:
         df = df.reset_index().rename(columns={df.index.name or 'index': depth_curve})
 
+    df = coerce_numeric_dataframe(df)
+    numeric_cols = [c for c in df.columns if c != depth_curve and pd.api.types.is_numeric_dtype(df[c]) and df[c].notna().any()]
+    if not numeric_cols:
+        raise LASParserError('No se encontraron curvas numéricas para graficar')
+
+    units = {c.mnemonic: (c.unit or '') for c in las.curves}
     metadata = {
         'version': _safe_header_value(las, 'VERS', section='Version'),
         'well_name': _safe_header_value(las, 'WELL', section='Well'),
@@ -61,22 +75,123 @@ def parse_las_file(file_path):
         'step': _safe_header_value(las, 'STEP', section='Well'),
         'null_value': _safe_header_value(las, 'NULL', section='Well'),
     }
+    curves = [
+        {'mnemonic': c.mnemonic, 'unit': c.unit, 'description': c.descr or infer_curve_description(c.mnemonic)}
+        for c in las.curves
+    ]
+    return {
+        'metadata': metadata,
+        'curves': curves,
+        'dataframe': df,
+        'depth_column': depth_curve,
+        'units': units,
+        'warnings': [],
+        'parser_type': 'standard_lasio',
+    }
 
-    curves = [{'mnemonic': c.mnemonic, 'unit': c.unit, 'description': c.descr} for c in las.curves]
-    table_preview = df.head(50).replace({pd.NA: None}).where(pd.notnull(df), None).to_dict('records')
+
+def parse_tabular_las(uploaded_file):
+    uploaded_file.seek(0)
+    raw = uploaded_file.read()
+    text = _decode_bytes(raw)
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if len(lines) < 3:
+        raise LASParserError('El archivo tabular no tiene suficientes datos')
+
+    separator = '\t' if '\t' in lines[0] else None
+
+    units_df = pd.read_csv(io.StringIO(text), sep=separator, header=None, nrows=2, engine='python')
+    headers = [str(v).strip() for v in units_df.iloc[0].tolist()]
+    units_row = [str(v).strip() for v in units_df.iloc[1].tolist()]
+    units = {headers[i]: units_row[i] if i < len(units_row) else '' for i in range(len(headers))}
+
+    df = pd.read_csv(io.StringIO(text), sep=separator, header=0, skiprows=[1], engine='python')
+    df.columns = [str(c).strip() for c in df.columns]
+    df = coerce_numeric_dataframe(df)
+    df = df.dropna(how='all')
+
+    depth_curve = detect_depth_curve(df.columns)
+    if not depth_curve:
+        raise LASParserError('No se encontró curva de profundidad')
+
+    numeric_cols = [c for c in df.columns if c != depth_curve and pd.api.types.is_numeric_dtype(df[c]) and df[c].notna().any()]
+    if not numeric_cols:
+        raise LASParserError('No se encontraron curvas numéricas para graficar')
+
+    curves = [
+        {'mnemonic': col, 'unit': units.get(col, ''), 'description': infer_curve_description(col)}
+        for col in df.columns
+    ]
+    metadata = {
+        'version': 'N/D (tabular)',
+        'well_name': 'N/D',
+        'company': 'N/D',
+        'field': 'N/D',
+        'location': 'N/D',
+        'start_depth': df[depth_curve].min(skipna=True),
+        'stop_depth': df[depth_curve].max(skipna=True),
+        'step': 'N/D',
+        'null_value': 'N/D',
+    }
+
+    return {
+        'metadata': metadata,
+        'curves': curves,
+        'dataframe': df,
+        'depth_column': depth_curve,
+        'units': units,
+        'warnings': [],
+        'parser_type': 'tabular_fallback',
+    }
+
+
+def build_analysis_output(parsed):
+    df = parsed['dataframe']
+    depth_curve = parsed['depth_column']
+    units = parsed['units']
+
     curve_stats = build_curve_stats(df)
+    interval_summary, intervals_table = detect_intervals(df, depth_curve)
 
-    return LASAnalysis(
-        metadata=metadata,
-        curves=curves,
-        table_preview=table_preview,
+    analysis = LASAnalysis(
+        metadata=parsed['metadata'],
+        curves=parsed['curves'],
+        table_preview=df.head(50).where(pd.notnull(df), None).to_dict('records'),
         table_columns=list(df.columns),
         curve_stats=curve_stats,
         depth_curve=depth_curve,
         all_curve_names=[c for c in df.columns if c != depth_curve],
-        interpretation_lines=basic_interpretation(df.columns),
-        interval_hints=detect_intervals(df, depth_curve),
-    ), df
+        interpretation_lines=basic_interpretation(df),
+        interval_hints=interval_summary,
+        intervals_table=intervals_table,
+        warnings=parsed['warnings'],
+        parser_type=parsed['parser_type'],
+        units=units,
+    )
+    return analysis, df
+
+
+def _read_las_with_fallback_encoding(file_path):
+    try:
+        return lasio.read(file_path)
+    except UnicodeDecodeError:
+        with open(file_path, 'rb') as f:
+            raw = f.read()
+        for enc in ('utf-8', 'latin-1', 'cp1252'):
+            try:
+                return lasio.read(io.StringIO(raw.decode(enc)))
+            except Exception:
+                continue
+        raise LASParserError('No se pudo leer el archivo por problemas de codificación.')
+    except Exception as exc:
+        raise LASParserError(f'Archivo inválido o no legible: {exc}') from exc
+
+
+def _decode_bytes(raw):
+    try:
+        return raw.decode('utf-8')
+    except UnicodeDecodeError:
+        return raw.decode('latin-1')
 
 
 def _safe_header_value(las, mnemonic, section='Well'):
@@ -87,87 +202,137 @@ def _safe_header_value(las, mnemonic, section='Well'):
         return 'N/D'
 
 
-def detect_depth_curve(df):
+def detect_depth_curve(columns):
+    cols = list(columns)
     for candidate in ['DEPTH', 'DEPT', 'MD']:
-        if candidate in df.columns:
+        if candidate in cols:
             return candidate
-    return df.index.name if df.index.name else 'DEPTH'
+    return None
+
+
+def coerce_numeric_dataframe(df):
+    out = df.copy()
+    for col in out.columns:
+        out[col] = pd.to_numeric(out[col], errors='coerce')
+    return out
+
+
+def infer_curve_description(mnemonic):
+    m = mnemonic.upper()
+    mapping = {
+        'DEPTH': 'Profundidad',
+        'DEPT': 'Profundidad',
+        'MD': 'Profundidad medida',
+        'DTCM': 'Sónico',
+        'SPOR': 'Porosidad sónica',
+        'GRDI': 'Gamma Ray',
+        'RILD': 'Resistividad profunda',
+        'RILM': 'Resistividad media',
+        'RSFE': 'Resistividad somera',
+        'SP': 'Potencial espontáneo',
+        'PEDN': 'Factor fotoeléctrico',
+        'NPOR': 'Porosidad neutrón',
+        'RHOB': 'Densidad bulk',
+        'DPOR': 'Porosidad por densidad',
+    }
+    return mapping.get(m, 'Curva de registro')
 
 
 def build_curve_stats(df):
     stats = []
     for col in df.columns:
         series = pd.to_numeric(df[col], errors='coerce')
-        stats.append({
-            'curve': col,
-            'min': round(series.min(skipna=True), 4) if series.notna().any() else None,
-            'max': round(series.max(skipna=True), 4) if series.notna().any() else None,
-            'mean': round(series.mean(skipna=True), 4) if series.notna().any() else None,
-            'std': round(series.std(skipna=True), 4) if series.notna().any() else None,
-            'nulls': int(series.isna().sum()),
-        })
+        stats.append({'curve': col, 'min': _r(series.min()), 'max': _r(series.max()), 'mean': _r(series.mean()), 'std': _r(series.std()), 'nulls': int(series.isna().sum())})
     return stats
 
 
-def basic_interpretation(columns):
-    joined = {c.upper() for c in columns}
+def _r(value):
+    return round(float(value), 4) if pd.notna(value) else None
+
+
+def basic_interpretation(df):
+    cols = {c.upper() for c in df.columns}
     notes = ['Esta interpretación es automática, preliminar y no sustituye un análisis petrofísico profesional.']
-    if {'GR', 'GRDI', 'GAMMA RAY'} & joined:
-        notes.append('GR alto sugiere lutitas/shale; GR bajo sugiere arenas o carbonatos más limpios.')
-    if 'RHOB' in joined:
-        notes.append('RHOB representa densidad aparente de la formación.')
-    if {'NPOR', 'NPHI'} & joined:
-        notes.append('NPOR/NPHI ayudan a inferir porosidad neutrón.')
-    if {'RILD', 'RILM', 'RES', 'RT'} & joined:
-        notes.append('Resistividad alta puede sugerir hidrocarburos o formaciones compactas.')
-    if 'SP' in joined:
-        notes.append('SP es útil para identificar zonas permeables.')
-    if {'DTC', 'DTCM'} & joined:
-        notes.append('Sónico (DTC/DTCM) ayuda a evaluar porosidad y compactación.')
+    if 'GRDI' in cols:
+        notes.append('GRDI alto: posible lutita/shale. GRDI bajo: posible arena limpia o carbonato.')
+    if 'RILD' in cols:
+        notes.append('RILD alto: posible zona resistiva, compacta o con hidrocarburos.')
+    if 'NPOR' in cols:
+        notes.append('NPOR alto: posible mayor porosidad.')
+    if 'RHOB' in cols:
+        notes.append('RHOB bajo: posible mayor porosidad.')
+    if 'SP' in cols:
+        notes.append('SP con deflexiones: posible zona permeable.')
     return notes
 
 
 def detect_intervals(df, depth_curve):
-    hints = []
+    intervals = []
+    summary = []
     depth = pd.to_numeric(df[depth_curve], errors='coerce')
-    gr_col = next((c for c in df.columns if c.upper() in ['GR', 'GRDI', 'GAMMA RAY']), None)
-    res_col = next((c for c in df.columns if c.upper() in ['RILD', 'RILM', 'RES', 'RT']), None)
-    por_col = next((c for c in df.columns if c.upper() in ['NPOR', 'NPHI']), None)
 
-    if gr_col:
-        gr = pd.to_numeric(df[gr_col], errors='coerce')
-        low_gr = df[gr < gr.quantile(0.35)]
-        if not low_gr.empty:
-            hints.append(f'GR bajo en ~{low_gr[depth_curve].min():.2f} a {low_gr[depth_curve].max():.2f}.')
-    if res_col:
-        res = pd.to_numeric(df[res_col], errors='coerce')
-        hi_res = df[res > res.quantile(0.75)]
-        if not hi_res.empty:
-            hints.append(f'Resistividad alta en ~{hi_res[depth_curve].min():.2f} a {hi_res[depth_curve].max():.2f}.')
-    if por_col:
-        por = pd.to_numeric(df[por_col], errors='coerce')
-        hi_por = df[por > por.quantile(0.75)]
-        if not hi_por.empty:
-            hints.append(f'Porosidad relativamente alta en ~{hi_por[depth_curve].min():.2f} a {hi_por[depth_curve].max():.2f}.')
-    if gr_col and res_col:
-        mask = (pd.to_numeric(df[gr_col], errors='coerce') < pd.to_numeric(df[gr_col], errors='coerce').quantile(0.35)) & (
-            pd.to_numeric(df[res_col], errors='coerce') > pd.to_numeric(df[res_col], errors='coerce').quantile(0.75)
-        )
-        combo = df[mask]
-        if not combo.empty:
-            hints.append(f'Combinación GR bajo + resistividad alta en ~{combo[depth_curve].min():.2f} a {combo[depth_curve].max():.2f}.')
+    conditions = {}
+    if 'GRDI' in df.columns:
+        gr = pd.to_numeric(df['GRDI'], errors='coerce')
+        conditions['GRDI bajo'] = gr <= gr.quantile(0.30)
+    if 'RILD' in df.columns:
+        rild = pd.to_numeric(df['RILD'], errors='coerce')
+        conditions['RILD alto'] = rild >= rild.quantile(0.70)
+    if 'NPOR' in df.columns:
+        npor = pd.to_numeric(df['NPOR'], errors='coerce')
+        conditions['NPOR alto'] = npor >= npor.quantile(0.70)
+    if 'RHOB' in df.columns:
+        rhob = pd.to_numeric(df['RHOB'], errors='coerce')
+        conditions['RHOB bajo'] = rhob <= rhob.quantile(0.30)
 
-    return hints if hints else ['No se detectaron intervalos destacados con las reglas básicas disponibles.']
+    for label, mask in conditions.items():
+        intervals.extend(group_intervals(df, depth_curve, mask, [label]))
+
+    if all(k in conditions for k in ['GRDI bajo', 'RILD alto', 'NPOR alto']):
+        combo_mask = conditions['GRDI bajo'] & conditions['RILD alto'] & conditions['NPOR alto']
+        intervals.extend(group_intervals(df, depth_curve, combo_mask, ['GRDI bajo', 'RILD alto', 'NPOR alto']))
+
+    if intervals:
+        summary.append(f'Se detectaron {len(intervals)} intervalos de interés con reglas básicas.')
+    else:
+        summary.append('No se detectaron intervalos destacados con las reglas básicas disponibles.')
+    return summary, intervals
 
 
-def build_plot_html(df, depth_curve, selected_curves):
+def group_intervals(df, depth_curve, mask, tags):
+    rows = df[mask.fillna(False)].copy()
+    if rows.empty:
+        return []
+    rows = rows[[depth_curve]].dropna().sort_values(depth_curve)
+    if rows.empty:
+        return []
+    depths = rows[depth_curve].tolist()
+    intervals = []
+    start = prev = depths[0]
+    step = max((depths[-1] - depths[0]) / max(len(depths), 1), 0.0001)
+    threshold = step * 2.5
+
+    for d in depths[1:]:
+        if (d - prev) > threshold:
+            intervals.append({'start_depth': _r(start), 'end_depth': _r(prev), 'conditions': ', '.join(tags)})
+            start = d
+        prev = d
+    intervals.append({'start_depth': _r(start), 'end_depth': _r(prev), 'conditions': ', '.join(tags)})
+    return intervals
+
+
+def build_plot_html(df, depth_curve, selected_curves, units=None):
+    units = units or {}
     charts = []
+    depth_unit = (units.get(depth_curve, '') or '').lower()
+    y_title = 'Depth (ft)' if depth_unit == 'ft' else depth_curve
     for curve in selected_curves:
         if curve not in df.columns:
             continue
+        x_title = f"{curve} ({units.get(curve, '')})" if units.get(curve) else curve
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=df[curve], y=df[depth_curve], mode='lines', name=curve))
-        fig.update_layout(title=f'Curva {curve}', xaxis_title=curve, yaxis_title=depth_curve, height=520)
+        fig.update_layout(title=f'Curva {curve}', xaxis_title=x_title, yaxis_title=y_title, height=520)
         fig.update_yaxes(autorange='reversed')
         charts.append({'curve': curve, 'html': plot(fig, output_type='div', include_plotlyjs='cdn')})
     return charts

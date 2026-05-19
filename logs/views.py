@@ -41,7 +41,7 @@ def analysis_view(request, file_id):
         return redirect('upload')
 
     selected_curves = request.POST.getlist('curves') if request.method == 'POST' else analysis.all_curve_names[:3]
-    charts = build_plot_html(df, analysis.depth_curve, selected_curves)
+    charts = build_plot_html(df, analysis.depth_curve, selected_curves, units=analysis.units)
 
     context = {
         'record': record,
