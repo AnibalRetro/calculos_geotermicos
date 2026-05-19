@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.db.utils import OperationalError, ProgrammingError
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import LASUploadForm
@@ -7,10 +8,22 @@ from .services.las_parser import LASParserError, build_plot_html, parse_las_file
 
 
 def upload_view(request):
-    files = UploadedLAS.objects.order_by('-uploaded_at')
+    files = UploadedLAS.objects.none()
+    db_ready = True
+    try:
+        files = UploadedLAS.objects.order_by('-uploaded_at')
+    except (OperationalError, ProgrammingError):
+        db_ready = False
+        messages.warning(
+            request,
+            'La base de datos aún no está inicializada. Ejecuta: python manage.py migrate',
+        )
     if request.method == 'POST':
         form = LASUploadForm(request.POST, request.FILES)
         if form.is_valid():
+            if not db_ready:
+                messages.error(request, 'No se puede cargar el archivo hasta ejecutar migraciones.')
+                return render(request, 'logs/upload.html', {'form': form, 'files': files})
             uploaded = form.cleaned_data['las_file']
             obj = UploadedLAS.objects.create(file=uploaded, original_name=uploaded.name)
             return redirect('analysis', file_id=obj.id)

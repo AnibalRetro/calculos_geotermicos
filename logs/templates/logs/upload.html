@@ -9,6 +9,14 @@
 <body>
 <div class="container">
   <h1>LAS Viewer local</h1>
+  {% if messages %}
+  <section class="panel">
+    {% for message in messages %}
+      <p class="msg {{ message.tags }}">{{ message }}</p>
+    {% endfor %}
+  </section>
+  {% endif %}
+
   <section class="panel">
     <h2>Panel de carga</h2>
     <form method="post" enctype="multipart/form-data">

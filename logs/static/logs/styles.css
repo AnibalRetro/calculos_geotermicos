@@ -9,3 +9,5 @@ button{background:#2563eb;color:#fff;border:0;padding:10px 14px;border-radius:6p
 .checkbox-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
 .plot{margin-top:12px}
 @media(max-width:768px){.container{padding:10px}}
+
+.msg{padding:10px;border-radius:6px;margin:8px 0}.msg.warning{background:#fff7ed;color:#9a3412}.msg.error{background:#fef2f2;color:#991b1b}

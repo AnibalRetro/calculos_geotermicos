@@ -48,3 +48,10 @@ Aplicación local para cargar, visualizar e interpretar archivos `.las` de regis
 ## Notas
 - Los archivos se guardan en `media/las_files/` para permitir análisis posteriores locales.
 - La interpretación es automática y orientativa; no sustituye un análisis profesional.
+
+## Solución de problemas
+- Error `no such table: logs_uploadedlas`: la BD no tiene migraciones aplicadas. Ejecuta:
+  ```bash
+  python manage.py migrate
+  ```
+- Si abriste el servidor antes de migrar, detenlo y vuelve a ejecutar `python manage.py runserver`.
