@@ -1,18 +1,51 @@
-# LAS Viewer (Django)
+# Calculadora Geotérmica y Visor LAS (Django)
 
-Aplicación local para cargar, visualizar e interpretar archivos `.las` de registros de pozo.
+Proyecto académico gratuito para apoyar a estudiantes de **ingeniería petroquímica, geofísica y geotérmica** con análisis de registros de pozo y visualización técnica de archivos LAS.
 
-## Características
-- Carga de archivos LAS con validación de extensión.
-- Lectura dual: LAS estándar con `lasio` y fallback para `.las` tabulares (encabezado + unidades + datos).
-- Visualización de metadatos de pozo y listado completo de curvas.
-- Vista tabular de los primeros 50 registros con `pandas`.
-- Selección de curvas y gráficas interactivas con `plotly` (profundidad invertida en Y).
-- Estadísticas básicas por curva.
-- Interpretación petrofísica preliminar e intervalos de interés automáticos.
-- Soporte para múltiples archivos cargados y análisis separados.
+**Desarrollado por Make IT Group en sociedad con la Asociación Mexicana de Ingeniería.**
 
-## Instalación y ejecución
+---
+
+## ¿Qué hace este repositorio?
+
+Este sistema web (Django) permite cargar archivos `.las`, interpretarlos automáticamente y mostrar resultados técnicos en paneles de análisis.
+
+### Flujo funcional
+
+1. **Carga de archivo LAS**
+   - Vista principal (`upload_view`) con formulario de subida.
+   - Guarda archivo en base de datos/modelo `UploadedLAS`.
+
+2. **Parsing robusto del archivo**
+   - Parser principal con `lasio` para LAS estándar.
+   - Fallback para LAS tabulares cuando el archivo no cumple secciones `~` estándar.
+   - Detección automática de curva de profundidad (`DEPTH`, `DEPT`, `MD`).
+
+3. **Procesamiento y análisis**
+   - Conversión de columnas a numérico.
+   - Estadísticas básicas por curva (mín, máx, media, desviación, nulos).
+   - Interpretación preliminar e identificación de intervalos de interés.
+
+4. **Visualización**
+   - Gráficas interactivas por curva con Plotly.
+   - Tabla de primeros 50 registros.
+   - Panel de metadatos y catálogo de curvas.
+
+---
+
+## Estructura principal
+
+- `logs/views.py`: flujo de carga y vista de análisis.
+- `logs/services/las_parser.py`: lectura, limpieza, estadísticas, interpretación y detección de intervalos.
+- `logs/forms.py`: validación de archivos cargados.
+- `logs/templates/logs/`: interfaz HTML de carga y análisis.
+- `logs/static/logs/styles.css`: estilos de la aplicación.
+- `index.html`: landing informativa institucional del proyecto.
+
+---
+
+## Instalación y ejecución local
+
 1. Crear y activar entorno virtual:
    - Linux/macOS:
      ```bash
@@ -24,38 +57,40 @@ Aplicación local para cargar, visualizar e interpretar archivos `.las` de regis
      python -m venv .venv
      .\.venv\Scripts\Activate.ps1
      ```
+
 2. Instalar dependencias:
    ```bash
    pip install -r requirements.txt
    ```
+
 3. Ejecutar migraciones:
    ```bash
    python manage.py migrate
    ```
-4. Correr servidor local:
+
+4. Levantar servidor:
    ```bash
    python manage.py runserver
    ```
-5. Abrir en navegador: `http://127.0.0.1:8000/`
 
-## Estructura
-- `logs/services/las_parser.py`: lógica central de lectura, estadísticas, interpretación e intervalos.
-- `logs/forms.py`: validaciones de carga.
-- `logs/views.py`: vistas de carga y análisis.
-- `logs/templates/logs/`: UI de carga y análisis.
-- `logs/static/logs/styles.css`: estilos simples y responsivos.
+5. Abrir:
+   - App Django: `http://127.0.0.1:8000/`
+   - Landing institucional (archivo estático): abre `index.html` en el navegador.
+
+---
+
+## Logos institucionales
+
+La landing `index.html` utiliza los siguientes archivos de imagen:
+
+- `assets/logo-make-it-group.png`
+- `assets/logo-ami.png`
+
+> Coloca en esos nombres/rutas los dos logos adjuntos para visualizarlos correctamente.
+
+---
 
 ## Notas
-- Los archivos se guardan en `media/las_files/` para permitir análisis posteriores locales.
-- La interpretación es automática y orientativa; no sustituye un análisis profesional.
 
-## Solución de problemas
-- Error `no such table: logs_uploadedlas`: la BD no tiene migraciones aplicadas. Ejecuta:
-  ```bash
-  python manage.py migrate
-  ```
-- Si abriste el servidor antes de migrar, detenlo y vuelve a ejecutar `python manage.py runserver`.
-
-- La carpeta `media/las_files/` viene inicializada en el repositorio (`.gitkeep`) y Django creará/gestionará archivos ahí al cargar LAS.
-
-- Soporta LAS estándar y archivos `.las` tabulares con primera fila de curvas, segunda fila de unidades y desde tercera fila datos numéricos.
+- La interpretación técnica es orientativa y no sustituye un estudio profesional integral.
+- Si aparece `no such table: logs_uploadedlas`, ejecuta `python manage.py migrate`.
