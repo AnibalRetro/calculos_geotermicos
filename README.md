@@ -79,18 +79,9 @@ Este sistema web (Django) permite cargar archivos `.las`, interpretarlos automá
 
 ---
 
-## Logos institucionales
-
-La landing `index.html` utiliza los siguientes archivos de imagen:
-
-- `assets/logo-make-it-group.png`
-- `assets/logo-ami.png`
-
-> Coloca en esos nombres/rutas los dos logos adjuntos para visualizarlos correctamente.
-
----
-
 ## Notas
 
 - La interpretación técnica es orientativa y no sustituye un estudio profesional integral.
 - Si aparece `no such table: logs_uploadedlas`, ejecuta `python manage.py migrate`.
+
+- Creado y desarrollado por Anibal Arenas - We don't try it, We Make IT
