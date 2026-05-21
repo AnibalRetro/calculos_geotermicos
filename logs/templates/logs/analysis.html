@@ -43,7 +43,10 @@
       {% endfor %}</div>
       <button type="submit">Actualizar gráficas</button>
     </form>
-    {% for c in charts %}<div class="plot">{{ c.html|safe }}</div>{% empty %}<p>Sin curvas seleccionadas.</p>{% endfor %}
+    {% if selected_curves %}
+      <div class="plot">{{ combined_chart.html|safe }}</div>
+      {% for c in charts %}<div class="plot">{{ c.html|safe }}</div>{% endfor %}
+    {% else %}<p>Sin curvas seleccionadas.</p>{% endif %}
   </section>
 
   <section class="panel"><h2>Tabla de datos (primeros 50 registros)</h2>
