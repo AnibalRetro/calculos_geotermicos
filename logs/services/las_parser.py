@@ -2,6 +2,7 @@ import io
 from dataclasses import dataclass
 
 import lasio
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.offline import plot
@@ -345,9 +346,21 @@ def build_combined_plot_html(df, depth_curve, selected_curves, units=None):
             )
         )
 
+    x_values = df[selected_curves].to_numpy(dtype=float)
+    finite_x = x_values[np.isfinite(x_values)]
+    if finite_x.size:
+        x_min = float(np.min(finite_x))
+        x_max = min(float(np.max(finite_x)), 200.0)
+        if x_min >= x_max:
+            x_min = min(x_min, 0.0)
+            x_max = 200.0
+        xaxis = {'range': [x_min, x_max]}
+    else:
+        xaxis = {'range': [0, 200]}
+
     fig.update_layout(
         title='Curvas unificadas (active/desactive desde la leyenda)',
-        xaxis_title='Valores de curva',
+        xaxis={'title': 'Valores de curva', **xaxis},
         yaxis_title=y_title,
         yaxis={'autorange': 'reversed'},
         legend={'orientation': 'h', 'yanchor': 'bottom', 'y': 1.02, 'xanchor': 'left', 'x': 0},
