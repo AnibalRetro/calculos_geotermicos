@@ -4,7 +4,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import LASUploadForm
 from .models import UploadedLAS
-from .services.las_parser import LASParserError, build_plot_html, parse_las_file
+from .services.las_parser import LASParserError, build_combined_plot_html, build_plot_html, parse_las_file
 
 
 def upload_view(request):
@@ -41,12 +41,14 @@ def analysis_view(request, file_id):
         return redirect('upload')
 
     selected_curves = request.POST.getlist('curves') if request.method == 'POST' else analysis.all_curve_names[:3]
+    combined_chart = build_combined_plot_html(df, analysis.depth_curve, selected_curves, units=analysis.units)
     charts = build_plot_html(df, analysis.depth_curve, selected_curves, units=analysis.units)
 
     context = {
         'record': record,
         'analysis': analysis,
         'selected_curves': selected_curves,
+        'combined_chart': combined_chart,
         'charts': charts,
     }
     return render(request, 'logs/analysis.html', context)

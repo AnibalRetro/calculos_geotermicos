@@ -303,8 +303,90 @@ def build_plot_html(df, depth_curve, selected_curves, units=None):
             continue
         x_title = f"{curve} ({units.get(curve, '')})" if units.get(curve) else curve
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df[curve], y=df[depth_curve], mode='lines', name=curve))
+        axis_cfg = _axis_config_for_curve(curve)
+        fig.add_trace(
+            go.Scatter(
+                x=df[curve],
+                y=df[depth_curve],
+                mode='lines',
+                name=curve,
+                line={'color': _curve_color(curve)},
+            )
+        )
         fig.update_layout(title=f'Curva {curve}', xaxis_title=x_title, yaxis_title=y_title, height=520)
         fig.update_yaxes(autorange='reversed')
+        fig.update_xaxes(
+            range=axis_cfg.get('range'),
+            type=axis_cfg.get('type', 'linear'),
+            dtick=axis_cfg.get('dtick'),
+        )
         charts.append({'curve': curve, 'html': plot(fig, output_type='div', include_plotlyjs='cdn')})
     return charts
+
+
+def build_combined_plot_html(df, depth_curve, selected_curves, units=None):
+    units = units or {}
+    depth_unit = (units.get(depth_curve, '') or '').lower()
+    y_title = 'Depth (ft)' if depth_unit == 'ft' else depth_curve
+    fig = go.Figure()
+
+    for curve in selected_curves:
+        if curve not in df.columns:
+            continue
+        fig.add_trace(
+            go.Scatter(
+                x=df[curve],
+                y=df[depth_curve],
+                mode='lines',
+                name=curve,
+                visible=True,
+                line={'color': _curve_color(curve), 'width': 1.5},
+                hovertemplate=f'{curve}: %{{x}}<br>{depth_curve}: %{{y}}<extra></extra>',
+            )
+        )
+
+    fig.update_layout(
+        title='Curvas unificadas (active/desactive desde la leyenda)',
+        xaxis_title='Valores de curva',
+        yaxis_title=y_title,
+        yaxis={'autorange': 'reversed'},
+        legend={'orientation': 'h', 'yanchor': 'bottom', 'y': 1.02, 'xanchor': 'left', 'x': 0},
+        height=620,
+    )
+    return {'html': plot(fig, output_type='div', include_plotlyjs='cdn')}
+
+
+def _axis_config_for_curve(curve):
+    key = curve.upper()
+    if key in ('RSFE', 'RSFL', 'RILM', 'RILD'):
+        return {'range': [float('-0.69897'), float('3.30103')], 'type': 'log'}
+    ranges = {
+        'SP': {'range': [0, 100]},
+        'GRDI': {'range': [0, 150]},
+        'DTCM': {'range': [49, 140]},
+        'NPOR': {'range': [0, 45]},
+        'DPOR': {'range': [0, 45]},
+        'RHOB': {'range': [1.95, 2.05]},
+    }
+    return ranges.get(key, {})
+
+
+def _curve_color(curve):
+    return {
+        'GRDI': '#008000',
+        'RILD': '#000000',
+        'RILM': '#4169E1',
+        'RSFE': '#FF8C00',
+        'RSFL': '#FF8C00',
+        'NPHI': '#003366',
+        'NPOR': '#0000FF',
+        'RHOB': '#FF0000',
+        'DTCM': '#000000',
+        'SP': '#87CEFA',
+        'DPOR': '#FF0000',
+        'PEDN': '#722F37',
+        'VSH': '#006400',
+        'PHITOTAL': '#000000',
+        'SWARCHIE': '#003366',
+        'SHC': '#000000',
+    }.get(curve.upper(), '#1f77b4')
